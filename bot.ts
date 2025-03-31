@@ -8,6 +8,7 @@ import {
   AccountInfo,
   Commitment,
   Transaction,
+  BlockhashWithExpiryBlockHeight,
 } from '@solana/web3.js';
 import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -308,11 +309,18 @@ export class Bot {
       }
 
       for (let i = 0; i < this.config.maxBuyRetries; i++) {
+
+        const startTime = Date.now();
+        let latestBlockhash: BlockhashWithExpiryBlockHeight | null = null; // <-- Variable for blockhash
+
         try {
           logger.info(
             { mint: poolKeys!.baseMint.toString() },
             `Send buy transaction attempt: ${i + 1}/${this.config.maxBuyRetries}`,
           );
+
+          latestBlockhash = await this.connection.getLatestBlockhash();
+
           // Use non-null assertion for poolKeys
           const result = await this.swap(
             poolKeys!,
@@ -324,22 +332,34 @@ export class Bot {
             this.config.buySlippage, 
             this.config.wallet,
             'buy',
+            latestBlockhash
           );
+
+          const latency = Date.now() - startTime;
 
           if (!result.confirmed) {
             logger.error(
-              { mint: poolKeys!.baseMint.toString(), signature: result.signature, error: result.error },
-              `Buy transaction failed to confirm attempt ${i + 1}.`,
+              { 
+                mint: poolKeys!.baseMint.toString(), 
+                signature: result.signature, 
+                error: result.error,
+                latency: `${latency}ms`,
+                attempt: i + 1,
+              },
+              `Buy transaction failed to confirm attempt ${i + 1}. Error: ${result.error || 'Confirmation timeout'}`,
             );
             continue; 
           }
 
+          const effectiveSlippage = 'N/A';
           logger.info(
             {
               dex: `https://dexscreener.com/solana/${poolKeys!.baseMint.toString()}?maker=${this.config.wallet.publicKey}`,
               mint: poolKeys!.baseMint.toString(),
               signature: result.signature,
               url: `https://solscan.io/tx/${result.signature}?cluster=${NETWORK}`,
+              latency: `${latency}ms`, // Log latency
+              effectiveSlippage: effectiveSlippage, // Log effective slippage
             },
             `Confirmed buy tx`,
           );
@@ -358,10 +378,22 @@ export class Bot {
           logger.info({ mint: poolKeys!.baseMint.toString(), timestamp: buyTimestamp }, 'Buy order details recorded.');
 
           break; 
-        } catch (error) {
+        } catch (error: any) {
           // Use optional chaining for poolKeys in logger
-          logger.warn({ mint: poolKeys?.baseMint?.toString(), error }, `Error during buy attempt ${i + 1}`);
-        }
+          const latency = Date.now() - startTime;
+          logger.warn(
+              {
+                  mint: poolKeys?.baseMint?.toString(),
+                  error: error.message,
+                  errorCode: error.code,
+                  attempt: i + 1,
+                  latency: `${latency}ms`
+              },
+              `Error during buy attempt ${i + 1}`
+          );
+          // Optional delay before retry
+          await sleep(500);
+       }
       }
     } catch (error) {
       // Use optional chaining and nullish coalescing for poolKeys in logger
@@ -550,24 +582,41 @@ export class Bot {
 
   private async sellOrder(poolKeys: ExtendedLiquidityPoolKeys, amountIn: TokenAmount, reason: string): Promise<void> {
     const mint = poolKeys.baseMint.toString();
-    logger.info({ mint, reason }, 'Attempting to sell token...'); 
+    logger.info({ mint, reason }, 'Attempting to sell token...');
 
-    if (this.sellOrders[mint]) {
-      logger.warn({ mint }, 'Sell order already exists for this token. Skipping.');
-
-      return;
+    if (!this.sellOrders[mint]) {
+        logger.warn({ mint }, 'Sell order initiated but processing flag was not set. Proceeding cautiously.');
+        this.sellOrders[mint] = true;
     }
 
+    let sellConfirmed = false;
+
     for (let i = 0; i < this.config.maxSellRetries; i++) {
+      const startTime = Date.now(); // <-- Start timer for latency logging
+      let latestBlockhash: BlockhashWithExpiryBlockHeight | null = null; // <-- Variable for blockhash
+
       try {
         logger.info(
           { mint: poolKeys.baseMint.toString() },
           `Send sell transaction attempt: ${i + 1}/${this.config.maxSellRetries}`,
         );
 
-        const result = await this.swap(
+        // ---> NEW: Fetch latest blockhash inside the loop <---
+        latestBlockhash = await this.connection.getLatestBlockhash();
+        // ---> END NEW <---
+
+        const mintAta = await getAssociatedTokenAddress(poolKeys.baseMint, this.config.wallet.publicKey);
+        if (!mintAta) {
+            throw new Error("Could not find associated token account for base mint to sell from.");
+        }
+
+        // ---> MODIFIED: Pass the new blockhash to the swap/execution logic <---
+        // Note: Your 'swap' method needs to be adapted to accept and use the blockhash
+        // OR the transaction building needs to happen here using the new blockhash.
+        // This example assumes 'swap' is modified or logic is inline.
+        const result = await this.swap( // Assuming swap is modified or logic is here
           poolKeys,
-          this.config.quoteAta,
+          mintAta,
           this.config.quoteAta,
           new Token(TOKEN_PROGRAM_ID, poolKeys.baseMint, poolKeys.baseDecimals),
           this.config.quoteToken,
@@ -575,33 +624,66 @@ export class Bot {
           this.config.sellSlippage,
           this.config.wallet,
           'sell',
+          latestBlockhash // <-- Pass the fresh blockhash
         );
+        // ---> END MODIFIED <---
 
-        if (result.confirmed) {
+        const latency = Date.now() - startTime; // <-- Calculate latency
+
+        if (result.confirmed && result.signature) {
+          // ---> ENHANCED LOGGING <---
+          // TODO: Calculate actual slippage if possible by fetching transaction details
+          const effectiveSlippage = 'N/A'; // Placeholder
+
           logger.info(
             {
               dex: `https://dexscreener.com/solana/${poolKeys.baseMint.toString()}?maker=${this.config.wallet.publicKey}`,
               mint: poolKeys.baseMint.toString(),
               signature: result.signature,
               url: `https://solscan.io/tx/${result.signature}?cluster=${NETWORK}`,
+              latency: `${latency}ms`, // Log latency
+              effectiveSlippage: effectiveSlippage, // Log effective slippage (if calculated)
             },
             `Confirmed sell tx`,
           );
+          // ---> END ENHANCED LOGGING <---
+          sellConfirmed = true;
           break;
         }
 
-        logger.info(
+        // ---> ENHANCED LOGGING (Failure) <---
+        logger.warn(
           {
             mint: poolKeys.baseMint.toString(),
             signature: result.signature,
-            error: result.error,
+            error: result.error, // Log the specific error if available
+            latency: `${latency}ms`,
+            attempt: i + 1,
           },
-          `Error confirming sell tx`,
+          `Sell transaction failed to confirm attempt ${i + 1}. Error: ${result.error || 'Confirmation timeout'}`,
         );
-      } catch (error) {
-        logger.debug({ mint: poolKeys.baseMint.toString(), error }, `Error confirming sell transaction`);
+        // ---> END ENHANCED LOGGING <---
+
+      } catch (error: any) {
+        const latency = Date.now() - startTime;
+        // ---> ENHANCED LOGGING (Catch Block) <---
+        logger.error(
+            {
+                mint: poolKeys.baseMint.toString(),
+                error: error.message,
+                errorCode: error.code, // Log code if present
+                attempt: i + 1,
+                latency: `${latency}ms`
+            },
+            `Error during sell attempt ${i + 1}`
+        );
+        // ---> END ENHANCED LOGGING <---
+        await sleep(500); // Optional delay on error
       }
-    }
+    } // End retry loop
+
+    delete this.sellOrders[mint];
+    logger.trace({ mint }, `Sell order processing finished. Confirmed: ${sellConfirmed}`);
   }
 
   private async swap(
@@ -614,6 +696,7 @@ export class Bot {
     slippage: number,
     wallet: Keypair,
     direction: 'buy' | 'sell',
+    latestBlockhash: BlockhashWithExpiryBlockHeight // <-- Add blockhash parameter
   ): Promise<{ confirmed: boolean; signature?: string; error?: any }> {
     const slippagePercent = new Percent(slippage, 100);
     // Pass the actual poolKeys object to fetchInfo, cast to any if needed
@@ -630,7 +713,6 @@ export class Bot {
       slippage: slippagePercent,
     });
 
-    const latestBlockhash = await this.connection.getLatestBlockhash();
     const { innerTransaction } = Liquidity.makeSwapFixedInInstruction(
       {
         poolKeys: poolKeys,
