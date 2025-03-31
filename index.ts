@@ -19,8 +19,8 @@ import {
   CHECK_IF_FREEZABLE,
   CHECK_IF_BURNED,
   QUOTE_MINT,
-  MAX_POOL_SIZE,
-  MIN_POOL_SIZE,
+  MIN_POOL_SIZE_AMOUNT,
+  MAX_POOL_SIZE_AMOUNT,
   QUOTE_AMOUNT,
   PRIVATE_KEY,
   USE_SNIPE_LIST,
@@ -33,8 +33,8 @@ import {
   COMPUTE_UNIT_LIMIT,
   COMPUTE_UNIT_PRICE,
   CACHE_NEW_MARKETS,
-  TAKE_PROFIT,
-  STOP_LOSS,
+  TAKE_PROFIT_PERCENTAGE,
+  STOP_LOSS_PERCENTAGE,
   BUY_SLIPPAGE,
   SELL_SLIPPAGE,
   PRICE_CHECK_DURATION,
@@ -46,7 +46,13 @@ import {
   FILTER_CHECK_DURATION,
   CONSECUTIVE_FILTER_MATCHES,
   MAX_POOL_AGE_SECONDS,
+  FILTER_BLOCKLIST_NAMES,
+  FILTER_BLOCKLIST_SYMBOLS,
+  MAX_SELL_DURATION_SECONDS,
+  SELL_TIMED_NAME_KEYWORDS,
+  SELL_TIMED_NAME_DURATION_SECONDS
 } from './helpers';
+
 import { version } from './package.json';
 import { WarpTransactionExecutor } from './transactions/warp-transaction-executor';
 import { JitoTransactionExecutor } from './transactions/jito-rpc-transaction-executor';
@@ -111,8 +117,9 @@ function printDetails(wallet: Keypair, quoteToken: Token, bot: Bot) {
   logger.info(`Sell slippage: ${botConfig.sellSlippage}%`);
   logger.info(`Price check interval: ${botConfig.priceCheckInterval} ms`);
   logger.info(`Price check duration: ${botConfig.priceCheckDuration} ms`);
-  logger.info(`Take profit: ${botConfig.takeProfit}%`);
-  logger.info(`Stop loss: ${botConfig.stopLoss}%`);
+  logger.info(`Take profit: ${botConfig.takeProfitPercentage}%`);
+  logger.info(`Stop loss: ${botConfig.stopLossPercentage}%`);
+  logger.info(`Max sell duration: ${botConfig.maxSellDurationSeconds} seconds`);
 
   logger.info('- Snipe list -');
   logger.info(`Snipe list: ${botConfig.useSnipeList}`);
@@ -125,13 +132,15 @@ function printDetails(wallet: Keypair, quoteToken: Token, bot: Bot) {
     logger.info('- Filters -');
     logger.info(`Filter check interval: ${botConfig.filterCheckInterval} ms`);
     logger.info(`Filter check duration: ${botConfig.filterCheckDuration} ms`);
-    logger.info(`Consecutive filter matches: ${botConfig.consecutiveMatchCount}`);
+    logger.info(`Consecutive filter matches: ${botConfig.consecutiveFilterMatches}`);
     logger.info(`Check renounced: ${botConfig.checkRenounced}`);
     logger.info(`Check freezable: ${botConfig.checkFreezable}`);
     logger.info(`Check burned: ${botConfig.checkBurned}`);
     logger.info(`Min pool size: ${botConfig.minPoolSize.toFixed()}`);
     logger.info(`Max pool size: ${botConfig.maxPoolSize.toFixed()}`);
     logger.info(`Max pool age: ${botConfig.maxPoolAgeSeconds} seconds`);
+    logger.info(`Blocklist names: ${botConfig.blocklistNames}`);
+    logger.info(`Blocklist symbols: ${botConfig.blocklistSymbols}`);
   }
 
   logger.info('------- CONFIGURATION END -------');
@@ -164,16 +173,22 @@ const runListener = async () => {
 
   const wallet = getWallet(PRIVATE_KEY.trim());
   const quoteToken = getToken(QUOTE_MINT);
-  const botConfig = <BotConfig>{
+  const quoteWallet = await getAssociatedTokenAddressSync(quoteToken.mint, wallet.publicKey);
+  const quoteAmount = new TokenAmount(quoteToken, QUOTE_AMOUNT, false);
+  const minPoolSize = new TokenAmount(quoteToken, MIN_POOL_SIZE_AMOUNT, false);
+  const maxPoolSize = new TokenAmount(quoteToken, MAX_POOL_SIZE_AMOUNT, false);
+
+  const botConfig: BotConfig = {
     wallet,
-    quoteAta: getAssociatedTokenAddressSync(quoteToken.mint, wallet.publicKey),
+    quoteAta: quoteWallet,
     checkRenounced: CHECK_IF_MINT_IS_RENOUNCED,
     checkFreezable: CHECK_IF_FREEZABLE,
     checkBurned: CHECK_IF_BURNED,
-    minPoolSize: new TokenAmount(quoteToken, MIN_POOL_SIZE, false),
-    maxPoolSize: new TokenAmount(quoteToken, MAX_POOL_SIZE, false),
+    minPoolSize: minPoolSize,
+    maxPoolSize: maxPoolSize,
+    quoteMint: quoteToken.mint, // Add missing quoteMint
     quoteToken,
-    quoteAmount: new TokenAmount(quoteToken, QUOTE_AMOUNT, false),
+    quoteAmount: quoteAmount,
     oneTokenAtATime: ONE_TOKEN_AT_A_TIME,
     useSnipeList: USE_SNIPE_LIST,
     autoSell: AUTO_SELL,
@@ -183,19 +198,24 @@ const runListener = async () => {
     maxBuyRetries: MAX_BUY_RETRIES,
     unitLimit: COMPUTE_UNIT_LIMIT,
     unitPrice: COMPUTE_UNIT_PRICE,
-    takeProfit: TAKE_PROFIT,
-    stopLoss: STOP_LOSS,
+    takeProfitPercentage: TAKE_PROFIT_PERCENTAGE,
+    stopLossPercentage: STOP_LOSS_PERCENTAGE,
     buySlippage: BUY_SLIPPAGE,
     sellSlippage: SELL_SLIPPAGE,
     priceCheckInterval: PRICE_CHECK_INTERVAL,
     priceCheckDuration: PRICE_CHECK_DURATION,
     filterCheckInterval: FILTER_CHECK_INTERVAL,
     filterCheckDuration: FILTER_CHECK_DURATION,
-    consecutiveMatchCount: CONSECUTIVE_FILTER_MATCHES,
+    consecutiveFilterMatches: CONSECUTIVE_FILTER_MATCHES,
+    blocklistNames: FILTER_BLOCKLIST_NAMES,
+    blocklistSymbols: FILTER_BLOCKLIST_SYMBOLS,
     maxPoolAgeSeconds: MAX_POOL_AGE_SECONDS,
+    maxSellDurationSeconds: MAX_SELL_DURATION_SECONDS,
+    sellTimedNameKeywords: SELL_TIMED_NAME_KEYWORDS,
+    sellTimedNameDurationSeconds: SELL_TIMED_NAME_DURATION_SECONDS,
   };
 
-  const bot = new Bot(connection, marketCache, poolCache, txExecutor, botConfig);
+  const bot = new Bot(connection, poolCache, txExecutor, botConfig);
   const valid = await bot.validate();
 
   if (!valid) {
@@ -228,7 +248,7 @@ const runListener = async () => {
 
     if (!exists && poolOpenTime > runTimestamp) {
       poolCache.save(updatedAccountInfo.accountId.toString(), poolState);
-      await bot.buy(updatedAccountInfo.accountId, poolState);
+      await bot.buy(updatedAccountInfo.accountId);
     }
   });
 
@@ -239,7 +259,7 @@ const runListener = async () => {
       return;
     }
 
-    await bot.sell(updatedAccountInfo.accountId, accountData);
+    await bot.sell(updatedAccountInfo.accountId);
   });
 
   printDetails(wallet, quoteToken, bot);
