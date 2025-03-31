@@ -1,12 +1,17 @@
 import { PublicKey } from '@solana/web3.js';
 import { Liquidity, LiquidityPoolKeys, LiquidityStateV4, MAINNET_PROGRAM_ID, Market } from '@raydium-io/raydium-sdk';
 import { MinimalMarketLayoutV3 } from './market';
+import BN from 'bn.js';
+
+export type ExtendedLiquidityPoolKeys = LiquidityPoolKeys & {
+  poolOpenTime: BN;
+};
 
 export function createPoolKeys(
   id: PublicKey,
   accountData: LiquidityStateV4,
   minimalMarketLayoutV3: MinimalMarketLayoutV3,
-): LiquidityPoolKeys {
+): ExtendedLiquidityPoolKeys {
   return {
     id,
     baseMint: accountData.baseMint,
@@ -39,5 +44,6 @@ export function createPoolKeys(
     withdrawQueue: accountData.withdrawQueue,
     lpVault: accountData.lpVault,
     lookupTableAccount: PublicKey.default,
+    poolOpenTime: accountData.poolOpenTime,
   };
 }

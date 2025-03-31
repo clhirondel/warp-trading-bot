@@ -45,6 +45,7 @@ import {
   FILTER_CHECK_INTERVAL,
   FILTER_CHECK_DURATION,
   CONSECUTIVE_FILTER_MATCHES,
+  MAX_POOL_AGE_SECONDS,
 } from './helpers';
 import { version } from './package.json';
 import { WarpTransactionExecutor } from './transactions/warp-transaction-executor';
@@ -130,6 +131,7 @@ function printDetails(wallet: Keypair, quoteToken: Token, bot: Bot) {
     logger.info(`Check burned: ${botConfig.checkBurned}`);
     logger.info(`Min pool size: ${botConfig.minPoolSize.toFixed()}`);
     logger.info(`Max pool size: ${botConfig.maxPoolSize.toFixed()}`);
+    logger.info(`Max pool age: ${botConfig.maxPoolAgeSeconds} seconds`);
   }
 
   logger.info('------- CONFIGURATION END -------');
@@ -190,6 +192,7 @@ const runListener = async () => {
     filterCheckInterval: FILTER_CHECK_INTERVAL,
     filterCheckDuration: FILTER_CHECK_DURATION,
     consecutiveMatchCount: CONSECUTIVE_FILTER_MATCHES,
+    maxPoolAgeSeconds: MAX_POOL_AGE_SECONDS,
   };
 
   const bot = new Bot(connection, marketCache, poolCache, txExecutor, botConfig);

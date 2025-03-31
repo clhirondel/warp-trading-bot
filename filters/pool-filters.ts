@@ -5,10 +5,12 @@ import { BurnFilter } from './burn.filter';
 import { MutableFilter } from './mutable.filter';
 import { RenouncedFreezeFilter } from './renounced.filter';
 import { PoolSizeFilter } from './pool-size.filter';
+import { MaxPoolAgeFilter } from './max-pool-age.filter';
+import { ExtendedLiquidityPoolKeys } from '../helpers/liquidity';
 import { CHECK_IF_BURNED, CHECK_IF_FREEZABLE, CHECK_IF_MINT_IS_RENOUNCED, CHECK_IF_MUTABLE, CHECK_IF_SOCIALS, logger } from '../helpers';
 
 export interface Filter {
-  execute(poolKeysV4: LiquidityPoolKeysV4): Promise<FilterResult>;
+  execute(poolKeys: ExtendedLiquidityPoolKeys): Promise<FilterResult>;
 }
 
 export interface FilterResult {
@@ -19,6 +21,7 @@ export interface FilterResult {
 export interface PoolFilterArgs {
   minPoolSize: TokenAmount;
   maxPoolSize: TokenAmount;
+  maxPoolAgeSeconds: number;
   quoteToken: Token;
 }
 
@@ -44,9 +47,14 @@ export class PoolFilters {
     if (!args.minPoolSize.isZero() || !args.maxPoolSize.isZero()) {
       this.filters.push(new PoolSizeFilter(connection, args.quoteToken, args.minPoolSize, args.maxPoolSize));
     }
+
+    // Add MaxPoolAge filter if configured
+    if (args.maxPoolAgeSeconds > 0) {
+      this.filters.push(new MaxPoolAgeFilter(args.maxPoolAgeSeconds));
+    }
   }
 
-  public async execute(poolKeys: LiquidityPoolKeysV4): Promise<boolean> {
+  public async execute(poolKeys: ExtendedLiquidityPoolKeys): Promise<boolean> {
     if (this.filters.length === 0) {
       return true;
     }

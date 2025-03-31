@@ -63,3 +63,6 @@ export const MIN_POOL_SIZE = retrieveEnvVariable('MIN_POOL_SIZE', logger);
 export const MAX_POOL_SIZE = retrieveEnvVariable('MAX_POOL_SIZE', logger);
 export const USE_SNIPE_LIST = retrieveEnvVariable('USE_SNIPE_LIST', logger) === 'true';
 export const SNIPE_LIST_REFRESH_INTERVAL = Number(retrieveEnvVariable('SNIPE_LIST_REFRESH_INTERVAL', logger));
+
+// New Filter: Max Pool Age
+export const MAX_POOL_AGE_SECONDS = Number(retrieveEnvVariable('MAX_POOL_AGE_SECONDS', logger));

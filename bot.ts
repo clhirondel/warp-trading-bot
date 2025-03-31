@@ -19,6 +19,7 @@ import { MarketCache, PoolCache, SnipeListCache } from './cache';
 import { PoolFilters } from './filters';
 import { TransactionExecutor } from './transactions';
 import { createPoolKeys, logger, NETWORK, sleep } from './helpers';
+import { ExtendedLiquidityPoolKeys } from './helpers/liquidity';
 import { Mutex } from 'async-mutex';
 import BN from 'bn.js';
 import { WarpTransactionExecutor } from './transactions/warp-transaction-executor';
@@ -52,6 +53,7 @@ export interface BotConfig {
   filterCheckInterval: number;
   filterCheckDuration: number;
   consecutiveMatchCount: number;
+  maxPoolAgeSeconds: number;
 }
 
 export class Bot {
@@ -81,6 +83,7 @@ export class Bot {
       quoteToken: this.config.quoteToken,
       minPoolSize: this.config.minPoolSize,
       maxPoolSize: this.config.maxPoolSize,
+      maxPoolAgeSeconds: this.config.maxPoolAgeSeconds,
     });
 
     if (this.config.useSnipeList) {
@@ -132,7 +135,7 @@ export class Bot {
         this.marketStorage.get(poolState.marketId.toString()),
         getAssociatedTokenAddress(poolState.baseMint, this.config.wallet.publicKey),
       ]);
-      const poolKeys: LiquidityPoolKeysV4 = createPoolKeys(accountId, poolState, market);
+      const poolKeys: ExtendedLiquidityPoolKeys = createPoolKeys(accountId, poolState, market);
 
       if (!this.config.useSnipeList) {
         const match = await this.filterMatch(poolKeys);
@@ -225,7 +228,7 @@ export class Bot {
       }
 
       const market = await this.marketStorage.get(poolData.state.marketId.toString());
-      const poolKeys: LiquidityPoolKeysV4 = createPoolKeys(new PublicKey(poolData.id), poolData.state, market);
+      const poolKeys: ExtendedLiquidityPoolKeys = createPoolKeys(new PublicKey(poolData.id), poolData.state, market);
 
       await this.priceMatch(tokenAmountIn, poolKeys);
 
@@ -284,7 +287,7 @@ export class Bot {
 
   // noinspection JSUnusedLocalSymbols
   private async swap(
-    poolKeys: LiquidityPoolKeysV4,
+    poolKeys: ExtendedLiquidityPoolKeys,
     ataIn: PublicKey,
     ataOut: PublicKey,
     tokenIn: Token,
@@ -354,7 +357,7 @@ export class Bot {
     return this.txExecutor.executeAndConfirm(transaction, wallet, latestBlockhash);
   }
 
-  private async filterMatch(poolKeys: LiquidityPoolKeysV4) {
+  private async filterMatch(poolKeys: ExtendedLiquidityPoolKeys): Promise<boolean> {
     if (this.config.filterCheckInterval === 0 || this.config.filterCheckDuration === 0) {
       return true;
     }
@@ -390,7 +393,7 @@ export class Bot {
     return false;
   }
 
-  private async priceMatch(amountIn: TokenAmount, poolKeys: LiquidityPoolKeysV4) {
+  private async priceMatch(amountIn: TokenAmount, poolKeys: ExtendedLiquidityPoolKeys) {
     if (this.config.priceCheckDuration === 0 || this.config.priceCheckInterval === 0) {
       return;
     }
@@ -442,4 +445,13 @@ export class Bot {
       }
     } while (timesChecked < timesToCheck);
   }
+}
+
+export interface Listeners {
+  // Define basic event emitter methods
+  on(event: string, listener: (...args: any[]) => void): this;
+  off(event: string, listener: (...args: any[]) => void): this;
+  emit(event: string, ...args: any[]): boolean;
+
+  close: () => Promise<void>;
 }
