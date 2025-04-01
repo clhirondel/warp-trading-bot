@@ -1,5 +1,6 @@
 import { Filter, FilterResult, MinimalTokenMetadata } from './pool-filters';
 import { ExtendedLiquidityPoolKeys } from '../helpers/liquidity';
+import { logger } from '../helpers'; // Import logger
 
 /**
  * Filters tokens based on whether their name or symbol are in provided blocklists.
@@ -20,9 +21,10 @@ export class NameSymbolFilter implements Filter {
   async execute(poolKeys: ExtendedLiquidityPoolKeys, metadata?: MinimalTokenMetadata): Promise<FilterResult> {
     if (!metadata) {
       // If metadata couldn't be fetched, we cannot perform the check.
-      // Returning true (pass) to not block unnecessarily if metadata fetch failed.
-      // Alternatively, could return false if strict blocking is desired even on fetch failure.
-      return { ok: true, message: 'NameSymbolFilter: Metadata not available' };
+      // Returning false because the check couldn't be completed.
+      // Alternatively, could return true if strict blocking is not desired on fetch failure.
+      logger.warn({ mint: poolKeys.baseMint.toString() }, 'NameSymbolFilter: Metadata not available, filter cannot be checked.');
+      return { ok: false, message: 'NameSymbolFilter: Metadata not available' };
     }
 
     const lowerCaseName = metadata.name.toLowerCase();
@@ -30,12 +32,16 @@ export class NameSymbolFilter implements Filter {
 
     // Check if the name is in the blocklist
     if (this.blocklistNames.has(lowerCaseName)) {
-      return { ok: false, message: `NameSymbolFilter: Blocklisted name: ${metadata.name}` };
+      const message = `NameSymbolFilter: Blocklisted name: ${metadata.name}`;
+      logger.trace({ mint: poolKeys.baseMint.toString() }, message);
+      return { ok: false, message };
     }
 
     // Check if the symbol is in the blocklist
     if (this.blocklistSymbols.has(lowerCaseSymbol)) {
-      return { ok: false, message: `NameSymbolFilter: Blocklisted symbol: ${metadata.symbol}` };
+      const message = `NameSymbolFilter: Blocklisted symbol: ${metadata.symbol}`;
+      logger.trace({ mint: poolKeys.baseMint.toString() }, message);
+      return { ok: false, message };
     }
 
     // If neither name nor symbol is blocklisted, the filter passes
