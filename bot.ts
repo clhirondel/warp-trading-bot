@@ -99,6 +99,8 @@ export interface BotConfig {
   sellSlippage: number;
   sellTimedNameKeywords: string[];
   sellTimedNameDurationSeconds: number;
+  minMarketCap: number; // Added minMarketCap
+  autoBuy: boolean; // Added autoBuy flag
 }
 
 export interface BuyOrderDetails {
@@ -156,6 +158,7 @@ export class Bot {
       checkBurned: this.config.checkBurned,
       filterCheckInterval: this.config.filterCheckInterval,
       consecutiveFilterMatches: this.config.consecutiveFilterMatches,
+      minMarketCap: this.config.minMarketCap, // Pass minMarketCap
     });
 
     if (this.config.useSnipeList) {
@@ -275,7 +278,15 @@ export class Bot {
         logger.info({ mint: poolKeys.baseMint.toString(), message: filterResult.message }, `Skipping buy due to filter: ${filterResult.message}`);
         return; // Filter failed, stop buy process
       }
+      logger.info({ mint: poolKeys.baseMint.toString() }, `Token passed all filters.`);
       // --- End Filter Execution ---
+
+      // --- Check AUTO_BUY flag ---
+      if (!this.config.autoBuy) {
+        logger.info({ mint: poolKeys.baseMint.toString() }, `Monitor mode: AUTO_BUY is false, skipping actual buy.`);
+        return; // Stop processing if autoBuy is disabled
+      }
+      // --- End Check AUTO_BUY flag ---
 
       // Ensure ATA exists
       const quoteAta = await getOrCreateAssociatedTokenAccount(

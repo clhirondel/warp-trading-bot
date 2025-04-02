@@ -34,6 +34,7 @@ export const TRANSACTION_EXECUTOR = retrieveEnvVariable('TRANSACTION_EXECUTOR', 
 export const CUSTOM_FEE = retrieveEnvVariable('CUSTOM_FEE', logger);
 
 // Buy
+export const AUTO_BUY = retrieveEnvVariable('AUTO_BUY', logger) === 'false'; // Default AUTO_BUY to false
 export const AUTO_BUY_DELAY = Number(retrieveEnvVariable('AUTO_BUY_DELAY', logger));
 export const QUOTE_MINT = (retrieveEnvVariable('QUOTE_MINT', logger) || 'So11111111111111111111111111111111111111112') as 'WSOL' | 'USDC';
 export const QUOTE_AMOUNT = retrieveEnvVariable('QUOTE_AMOUNT', logger) || '0.01';
@@ -41,7 +42,7 @@ export const MAX_BUY_RETRIES = Number(retrieveEnvVariable('MAX_BUY_RETRIES', log
 export const BUY_SLIPPAGE = Number(retrieveEnvVariable('BUY_SLIPPAGE', logger));
 
 // Sell
-export const AUTO_SELL = retrieveEnvVariable('AUTO_SELL', logger) === 'true';
+export const AUTO_SELL = retrieveEnvVariable('AUTO_SELL', logger) === 'true'; // Default AUTO_SELL to true
 export const AUTO_SELL_DELAY = Number(retrieveEnvVariable('AUTO_SELL_DELAY', logger));
 export const MAX_SELL_RETRIES = Number(retrieveEnvVariable('MAX_SELL_RETRIES', logger) || '10');
 export const TAKE_PROFIT = Number(retrieveEnvVariable('TAKE_PROFIT', logger) || '25'); // Handle default
@@ -69,6 +70,7 @@ export const CHECK_IF_FREEZABLE = (retrieveEnvVariable('CHECK_IF_FREEZABLE', log
 export const CHECK_IF_BURNED = (retrieveEnvVariable('CHECK_IF_BURNED', logger) || 'true') === 'true';
 export const MIN_POOL_SIZE_AMOUNT = retrieveEnvVariable('MIN_POOL_SIZE', logger) || '5';
 export const MAX_POOL_SIZE_AMOUNT = retrieveEnvVariable('MAX_POOL_SIZE', logger) || '50';
+export const MIN_MARKET_CAP = Number(retrieveEnvVariable('MIN_MARKET_CAP', logger) || '0'); // Added Market Cap Filter
 export const USE_SNIPE_LIST = (retrieveEnvVariable('USE_SNIPE_LIST', logger) || 'false') === 'true';
 export const SNIPE_LIST_REFRESH_INTERVAL = Number(retrieveEnvVariable('SNIPE_LIST_REFRESH_INTERVAL', logger) || '30000');
 

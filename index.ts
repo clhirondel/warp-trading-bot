@@ -50,7 +50,9 @@ import {
   FILTER_BLOCKLIST_SYMBOLS,
   MAX_SELL_DURATION_SECONDS,
   SELL_TIMED_NAME_KEYWORDS,
-  SELL_TIMED_NAME_DURATION_SECONDS
+  SELL_TIMED_NAME_DURATION_SECONDS,
+  MIN_MARKET_CAP, // Added import
+  AUTO_BUY // Added import
 } from './helpers';
 
 import { version } from './package.json';
@@ -104,6 +106,7 @@ function printDetails(wallet: Keypair, quoteToken: Token, bot: Bot) {
   logger.info(`Log level: ${LOG_LEVEL}`);
 
   logger.info('- Buy -');
+  logger.info(`Auto Buy: ${botConfig.autoBuy}`); // Added Auto Buy logging
   logger.info(`Buy amount: ${botConfig.quoteAmount.toFixed()} ${botConfig.quoteToken.name}`);
   logger.info(`Auto buy delay: ${botConfig.autoBuyDelay} ms`);
   logger.info(`Max buy retries: ${botConfig.maxBuyRetries}`);
@@ -138,6 +141,7 @@ function printDetails(wallet: Keypair, quoteToken: Token, bot: Bot) {
     logger.info(`Check burned: ${botConfig.checkBurned}`);
     logger.info(`Min pool size: ${botConfig.minPoolSize.toFixed()}`);
     logger.info(`Max pool size: ${botConfig.maxPoolSize.toFixed()}`);
+    logger.info(`Min market cap: ${botConfig.minMarketCap.toLocaleString()}`); // Added market cap logging
     logger.info(`Max pool age: ${botConfig.maxPoolAgeSeconds} seconds`);
     logger.info(`Blocklist names: ${botConfig.blocklistNames}`);
     logger.info(`Blocklist symbols: ${botConfig.blocklistSymbols}`);
@@ -211,9 +215,11 @@ const runListener = async () => {
     blocklistSymbols: FILTER_BLOCKLIST_SYMBOLS,
     maxPoolAgeSeconds: MAX_POOL_AGE_SECONDS,
     maxSellDurationSeconds: MAX_SELL_DURATION_SECONDS,
-    sellTimedNameKeywords: SELL_TIMED_NAME_KEYWORDS,
-    sellTimedNameDurationSeconds: SELL_TIMED_NAME_DURATION_SECONDS,
-  };
+  sellTimedNameKeywords: SELL_TIMED_NAME_KEYWORDS,
+  sellTimedNameDurationSeconds: SELL_TIMED_NAME_DURATION_SECONDS,
+  minMarketCap: MIN_MARKET_CAP, // Added minMarketCap
+  autoBuy: AUTO_BUY, // Added autoBuy
+};
 
   const bot = new Bot(connection, poolCache, txExecutor, botConfig);
   const valid = await bot.validate();

@@ -59,6 +59,7 @@ You should see the following output:
 - `AUTO_BUY_DELAY` - Delay in milliseconds before buying a token.
 - `MAX_BUY_RETRIES` - Maximum number of retries for buying a token.
 - `BUY_SLIPPAGE` - Slippage %. Default: `10`.
+- `AUTO_BUY` - Set to `true` to automatically execute buys when filters pass. Set to `false` to run in monitor-only mode (logs filter results but doesn't buy). Default: `true`.
 
 #### Sell
 
@@ -104,6 +105,7 @@ Note: When using snipe list filters below will be disabled.
 - `CHECK_IF_BURNED` - Set to `true` to buy tokens only if their liquidity pool is burned. Default: `true`.
 - `MIN_POOL_SIZE` - Minimum liquidity pool size (in `QUOTE_MINT` amount, e.g., WSOL). Pools smaller than this will be ignored. Set `0` to disable. Default: `5`.
 - `MAX_POOL_SIZE` - Maximum liquidity pool size (in `QUOTE_MINT` amount, e.g., WSOL). Pools larger than this will be ignored. Set `0` to disable. Default: `50`.
+- `MIN_MARKET_CAP` - Minimum market cap (FDV = (total supply - burned supply) * Price) in quote tokens (e.g., 10000 for $10k). Pools below this will be ignored. Set `0` to disable. Default: `0`.
 - `MAX_POOL_AGE_SECONDS` - Maximum age of the liquidity pool in seconds. Pools older than this will be ignored. Set to `0` to disable this check. Default: `1200` (20 minutes).
 - `FILTER_BLOCKLIST_NAMES` - Comma-separated list of token names to block (case-insensitive). Example: `PUMP,BadToken`.
 - `FILTER_BLOCKLIST_SYMBOLS` - Comma-separated list of token symbols to block (case-insensitive). Example: `TRUMP,BAD`.

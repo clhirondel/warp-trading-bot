@@ -7,6 +7,7 @@ import { NameSymbolFilter } from '../filters/name-symbol.filter';
 import { RenouncedFreezeFilter } from './renounced.filter';
 import { PoolSizeFilter } from './pool-size.filter';
 import { MaxPoolAgeFilter } from './max-pool-age.filter';
+import { MarketCapFilter } from './market-cap.filter'; // Added import
 import { ExtendedLiquidityPoolKeys } from '../helpers/liquidity';
 import { CHECK_IF_BURNED, CHECK_IF_FREEZABLE, CHECK_IF_MINT_IS_RENOUNCED, CHECK_IF_MUTABLE, CHECK_IF_SOCIALS, logger } from '../helpers';
 
@@ -44,6 +45,7 @@ export interface PoolFilterArgs {
   checkFreezable: boolean;
   checkBurned: boolean;
   quoteToken: Token;
+  minMarketCap: number; // Added minMarketCap
 }
 
 export class PoolFilters implements Filter {
@@ -87,6 +89,11 @@ export class PoolFilters implements Filter {
     if (args.maxPoolAgeSeconds > 0) {
       // MaxPoolAgeFilter uses poolOpenTime from ExtendedLiquidityPoolKeys, not metadata
       this.filters.push(new MaxPoolAgeFilter(args.maxPoolAgeSeconds));
+    }
+
+    if (args.minMarketCap > 0) {
+      // MarketCapFilter needs connection, quoteToken, and minMarketCap
+      this.filters.push(new MarketCapFilter(connection, args.quoteToken, args.minMarketCap));
     }
   }
 
