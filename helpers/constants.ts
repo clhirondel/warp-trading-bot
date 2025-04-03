@@ -33,6 +33,12 @@ export const CACHE_NEW_MARKETS = retrieveEnvVariable('CACHE_NEW_MARKETS', logger
 export const TRANSACTION_EXECUTOR = retrieveEnvVariable('TRANSACTION_EXECUTOR', logger);
 export const CUSTOM_FEE = retrieveEnvVariable('CUSTOM_FEE', logger);
 
+// Telegram Alerts (Optional)
+export const TELEGRAM_ALERTS_ENABLED = (process.env.TELEGRAM_ALERTS_ENABLED || 'false') === 'true';
+export const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
+export const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || '';
+
+
 // Buy
 export const AUTO_BUY = retrieveEnvVariable('AUTO_BUY', logger) === 'false'; // Default AUTO_BUY to false
 export const AUTO_BUY_DELAY = Number(retrieveEnvVariable('AUTO_BUY_DELAY', logger));

@@ -31,6 +31,7 @@ import {
   LiquidityPoolInfo,
   LiquidityStateLayoutV4,
   Percent,
+  Price, // Added Price import
   Token,
   TokenAmount,
   CurrencyAmount,
@@ -42,6 +43,7 @@ import { MarketCache, PoolCache, SnipeListCache } from './cache';
 import { PoolFilters, MinimalTokenMetadata } from './filters'; // Import MinimalTokenMetadata
 import { TransactionExecutor } from './transactions';
 import { createPoolKeys, logger, NETWORK, sleep } from './helpers';
+import { sendTelegramMessage } from './helpers/telegram'; // Import Telegram helper
 import { ExtendedLiquidityPoolKeys } from './helpers/liquidity';
 import { Mutex } from 'async-mutex';
 import BN from 'bn.js';
@@ -279,6 +281,12 @@ export class Bot {
         return; // Filter failed, stop buy process
       }
       logger.info({ mint: poolKeys.baseMint.toString() }, `Token passed all filters.`);
+
+      // --- Send Potential Buy Alert ---
+      const potentialBuyMessage = `✅ *Potential Buy* ✅\nToken: ${metadata?.symbol || 'Symbol N/A'} (${metadata?.name || 'Name N/A'})\nMint: \`${poolKeys.baseMint.toString()}\`\n[Solscan](https://solscan.io/token/${poolKeys.baseMint.toString()})`;
+      sendTelegramMessage(potentialBuyMessage).catch(e => logger.error({ error: e }, 'Failed to send potential buy Telegram message.'));
+      // --- End Potential Buy Alert ---
+
       // --- End Filter Execution ---
 
       // --- Check AUTO_BUY flag ---
@@ -326,6 +334,9 @@ export class Bot {
         return; // Return here to ensure finally block runs correctly
       }
 
+      let buyConfirmed = false; // Flag to track if buy succeeded
+      let lastError: any = null; // Store last error for alert
+
       for (let i = 0; i < this.config.maxBuyRetries; i++) {
         const startTime = Date.now();
         let latestBlockhash: BlockhashWithExpiryBlockHeight | null = null; // <-- Variable for blockhash
@@ -364,6 +375,7 @@ export class Bot {
               },
               `Buy transaction failed to confirm attempt ${i + 1}. Error: ${result.error || 'Confirmation timeout'}`,
             );
+            lastError = result.error || 'Confirmation timeout'; // Store error
             continue;
           }
 
@@ -383,6 +395,14 @@ export class Bot {
           const buyTimestamp = Date.now();
           const baseToken = new Token(TOKEN_PROGRAM_ID, poolKeys!.baseMint, poolKeys!.baseDecimals);
           const minBaseTokenAmountReceived = new TokenAmount(baseToken, minSimulatedAmountOut.raw);
+
+          // --- Send Confirmed Buy Alert ---
+          if (this.config.autoBuy) { // Only send if autoBuy was on
+            const pricePerBase = quoteTokenAmount.isZero() ? 'N/A' : new Price(this.config.quoteToken, quoteTokenAmount.raw, baseToken, minBaseTokenAmountReceived.raw).toSignificant(6); // Approx price
+            const confirmedBuyMessage = `💰 *Confirmed Buy* 💰\nToken: ${metadata?.symbol || 'Symbol N/A'} (${metadata?.name || 'Name N/A'})\nMint: \`${poolKeys!.baseMint.toString()}\`\nAmount: ${quoteTokenAmount.toFixed()} ${this.config.quoteToken.symbol}\nApprox Price: ${pricePerBase} ${this.config.quoteToken.symbol}\n[Solscan TX](https://solscan.io/tx/${result.signature}?cluster=${NETWORK})`;
+            sendTelegramMessage(confirmedBuyMessage).catch(e => logger.error({ error: e }, 'Failed to send confirmed buy Telegram message.'));
+          }
+          // --- End Confirmed Buy Alert ---
 
           // Store buy order details, including metadata if fetched
           this.buyOrders[poolKeys!.baseMint.toString()] = {
@@ -408,9 +428,18 @@ export class Bot {
             },
             `Error during buy attempt ${i + 1}`
           );
+          lastError = error; // Store error
           await sleep(500); // Optional delay before retry
         }
       }
+
+      // --- Send Buy Failed Alert ---
+      if (!buyConfirmed && this.config.autoBuy) { // Check if buy wasn't confirmed and autoBuy was on
+          const errorMessage = lastError instanceof Error ? lastError.message : JSON.stringify(lastError);
+          const buyFailedMessage = `❌ *Buy Failed* ❌\nToken: ${metadata?.symbol || 'Symbol N/A'} (${metadata?.name || 'Name N/A'})\nMint: \`${poolKeys!.baseMint.toString()}\`\nReason: ${errorMessage}`;
+          sendTelegramMessage(buyFailedMessage).catch(e => logger.error({ error: e }, 'Failed to send buy failed Telegram message.'));
+      }
+      // --- End Buy Failed Alert ---
     } catch (error) {
       logger.error({ mint: poolKeys?.baseMint?.toString() ?? baseMintStr ?? 'unknown', error }, 'Failed to buy token');
     } finally {
@@ -595,6 +624,12 @@ export class Bot {
       // Execute sell if a reason was determined
       if (sellReason) {
         logger.info(`[${mint}] Triggering sell due to: ${sellReason}`);
+        // --- Send Sell Trigger Alert ---
+        const tokenName = buyOrder.tokenName || 'Name N/A';
+        const tokenSymbol = buyOrder.tokenSymbol || 'Symbol N/A';
+        const sellTriggerMessage = `🚨 *Triggering Sell* 🚨\nToken: ${tokenSymbol} (${tokenName})\nMint: \`${mint}\`\nReason: ${sellReason}\n[Solscan](https://solscan.io/token/${mint})`;
+        sendTelegramMessage(sellTriggerMessage).catch(e => logger.error({ error: e }, 'Failed to send sell trigger Telegram message.'));
+        // --- End Sell Trigger Alert ---
         await this.sellOrder(poolKeys, tokenAmountIn, sellReason);
         // sellOrder handles deleting the sellOrders flag on completion/failure
       }
@@ -665,6 +700,14 @@ export class Bot {
             `Confirmed sell tx`,
           );
           sellConfirmed = true;
+
+          // --- Send Confirmed Sell Alert ---
+          const sellTokenName = this.buyOrders[mint]?.tokenName || 'Name N/A'; // Get name from buy order if possible
+          const sellTokenSymbol = this.buyOrders[mint]?.tokenSymbol || 'Symbol N/A';
+          const confirmedSellMessage = `💸 *Confirmed Sell* 💸\nToken: ${sellTokenSymbol} (${sellTokenName})\nMint: \`${mint}\`\nReason: ${reason}\n[Solscan TX](https://solscan.io/tx/${result.signature}?cluster=${NETWORK})`;
+          sendTelegramMessage(confirmedSellMessage).catch(e => logger.error({ error: e }, 'Failed to send confirmed sell Telegram message.'));
+          // --- End Confirmed Sell Alert ---
+
           // Remove from buy orders after successful sell
           delete this.buyOrders[mint];
           logger.trace({ mint }, `Removed from buy orders after successful sell.`);
@@ -697,6 +740,16 @@ export class Bot {
         await sleep(500); // Optional delay on error
       }
     } // End retry loop
+
+    // --- Send Sell Failed Alert ---
+    if (!sellConfirmed) {
+        const sellTokenName = this.buyOrders[mint]?.tokenName || 'Name N/A'; // Get name from buy order if possible
+        const sellTokenSymbol = this.buyOrders[mint]?.tokenSymbol || 'Symbol N/A';
+        // We don't have the specific error from the loop easily here, so provide a general failure message
+        const sellFailedMessage = `❌ *Sell Failed* ❌\nToken: ${sellTokenSymbol} (${sellTokenName})\nMint: \`${mint}\`\nReason: Failed to confirm after ${this.config.maxSellRetries} retries.`;
+        sendTelegramMessage(sellFailedMessage).catch(e => logger.error({ error: e }, 'Failed to send sell failed Telegram message.'));
+    }
+     // --- End Sell Failed Alert ---
 
     // Clean up the processing flag regardless of confirmation outcome
     delete this.sellOrders[mint];

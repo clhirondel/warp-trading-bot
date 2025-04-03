@@ -47,6 +47,11 @@ You should see the following output:
   - Minimum value is 0.0001 SOL, but we recommend using 0.006 SOL or above
   - On top of this fee, minimal solana network fee will be applied
 
+#### Telegram Alerts (Optional)
+- `TELEGRAM_ALERTS_ENABLED` - Set to `true` to enable sending alerts via Telegram. Default: `false`.
+- `TELEGRAM_BOT_TOKEN` - Your Telegram Bot API token (obtained from BotFather). Required if alerts are enabled.
+- `TELEGRAM_CHAT_ID` - The ID of the Telegram chat (user, group, or channel) where alerts should be sent. Required if alerts are enabled.
+
 #### Priority Fees
 *   `USE_PRIORITY_FEES` (boolean): Enable/disable priority fees for transactions. Uses `COMPUTE_UNIT_LIMIT` and `COMPUTE_UNIT_PRICE` when `true`. Default: `true`.
 *   `COMPUTE_UNIT_LIMIT` (number): Compute unit limit for transactions when priority fees are enabled. Default: `101337`.
