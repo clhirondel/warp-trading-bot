@@ -257,8 +257,19 @@ export class Bot {
         return; // Return here to ensure finally block runs correctly
       }
 
-      // --- Execute Filters ---
-      // Fetch metadata if needed by any filter
+      // --- Refactored Filter Logic ---
+
+      const maxPoolAgeMillis = this.config.maxPoolAgeSeconds > 0 ? this.config.maxPoolAgeSeconds * 1000 : 0;
+      const poolOpenTimestamp = poolKeys.poolOpenTime.toNumber() * 1000; // Convert BN seconds to milliseconds
+
+      // 1. Initial Age Check
+      if (maxPoolAgeMillis > 0 && (Date.now() - poolOpenTimestamp) > maxPoolAgeMillis) {
+          logger.info({ mint: baseMintStr }, `Skipping buy: Pool is older than MAX_POOL_AGE_SECONDS (${this.config.maxPoolAgeSeconds}s).`);
+          return;
+      }
+
+      // Fetch metadata once if needed by any filter
+      // metadata is declared above
       const needsMetadata = this.poolFilters.filters.some((f) => f.requiresMetadata);
       if (needsMetadata) {
         try {
@@ -275,20 +286,85 @@ export class Bot {
         }
       }
 
-      const filterResult = await this.poolFilters.execute(poolKeys, metadata);
-      if (!filterResult.ok) {
-        logger.info({ mint: poolKeys.baseMint.toString(), message: filterResult.message }, `Skipping buy due to filter: ${filterResult.message}`);
-        return; // Filter failed, stop buy process
-      }
-      logger.info({ mint: poolKeys.baseMint.toString() }, `Token passed all filters.`);
+      let initialCheckPassed = false;
+      let retryPassed = false;
+      let lastFilterMessage = 'Filters not run yet.';
 
-      // --- Send Potential Buy Alert ---
+      // 2. Initial Filter Attempt
+      try {
+          const initialResult = await this.poolFilters.execute(poolKeys, metadata);
+          lastFilterMessage = initialResult.message || 'Initial check passed.';
+          if (initialResult.ok) {
+              logger.info({ mint: poolKeys.baseMint.toString() }, `Initial filter check passed.`);
+              initialCheckPassed = true;
+          } else {
+              logger.info({ mint: poolKeys.baseMint.toString(), message: initialResult.message }, `Initial filter check failed: ${initialResult.message}. Entering retry loop.`);
+          }
+      } catch (e: any) {
+          logger.error({ mint: poolKeys.baseMint.toString(), error: e }, 'Error during initial filter execution.');
+          lastFilterMessage = `Error during initial filter check: ${e.message}`;
+          // Proceed to retry loop even on error? Or discard? Let's retry for now.
+      }
+
+
+      // 3. Retry Loop (If Initial Fails and pool is young enough)
+      if (!initialCheckPassed && maxPoolAgeMillis > 0) {
+          const retryEndTime = poolOpenTimestamp + maxPoolAgeMillis;
+          while (Date.now() < retryEndTime) {
+              await sleep(3000); // Wait 3 seconds
+
+              // Re-check age inside loop
+              if (Date.now() >= retryEndTime) {
+                  logger.info({ mint: poolKeys.baseMint.toString() }, `Stopping retry loop: Pool exceeded MAX_POOL_AGE_SECONDS.`);
+                  lastFilterMessage = `Pool aged out during retry. Last fail reason: ${lastFilterMessage}`;
+                  break; // Exit loop if too old
+              }
+
+              logger.trace({ mint: poolKeys.baseMint.toString() }, `Retrying filter check...`);
+              try {
+                  // Re-fetch metadata if needed? For now, reuse initial metadata if fetched.
+                  const retryResult = await this.poolFilters.execute(poolKeys, metadata);
+                  lastFilterMessage = retryResult.message || 'Retry check passed.';
+                  if (retryResult.ok) {
+                      logger.info({ mint: poolKeys.baseMint.toString() }, `Filter check passed during retry loop.`);
+                      retryPassed = true;
+                      break; // Exit loop on success
+                  } else {
+                       logger.trace({ mint: poolKeys.baseMint.toString(), message: retryResult.message }, `Filter check failed during retry: ${retryResult.message}`);
+                  }
+              } catch (e: any) {
+                  logger.error({ mint: poolKeys.baseMint.toString(), error: e }, 'Error during filter retry execution.');
+                  lastFilterMessage = `Error during filter retry: ${e.message}`;
+                  // Continue retrying even on error? Or break? Let's continue for now.
+              }
+          }
+      }
+
+      // If neither initial nor retry passed, discard the token
+      if (!initialCheckPassed && !retryPassed) {
+          logger.info({ mint: poolKeys.baseMint.toString(), message: lastFilterMessage }, `Skipping buy: Token failed initial checks and retry period.`);
+          return;
+      }
+
+      // 4. Confirmation Phase (Run filterMatch) - Only if initial or retry passed
+      logger.info({ mint: poolKeys.baseMint.toString() }, `Entering filter confirmation phase...`);
+      const confirmationPassed = await this.filterMatch(poolKeys); // filterMatch uses FILTER_CHECK_INTERVAL/DURATION/CONSECUTIVE
+
+      if (!confirmationPassed) {
+          logger.info({ mint: poolKeys.baseMint.toString() }, `Skipping buy: Token failed confirmation phase (filterMatch).`);
+          // No need to go back to retry loop as per user confirmation
+          return;
+      }
+      logger.info({ mint: poolKeys.baseMint.toString() }, `Token passed confirmation phase.`);
+
+
+      // --- Send Potential Buy Alert (Moved here after all checks pass) ---
       const potentialBuyMessage = `✅ *Potential Buy* ✅\nToken: ${metadata?.symbol || 'Symbol N/A'} (${metadata?.name || 'Name N/A'})\nMint: \`${poolKeys.baseMint.toString()}\`\n[Solscan](https://solscan.io/token/${poolKeys.baseMint.toString()})`;
       sendTelegramMessage(potentialBuyMessage).catch(e => logger.error({ error: e }, 'Failed to send potential buy Telegram message.'));
       // --- End Potential Buy Alert ---
 
-      // --- End Filter Execution ---
 
+      // 5. Buy/Monitor
       // --- Check AUTO_BUY flag ---
       if (!this.config.autoBuy) {
         logger.info({ mint: poolKeys.baseMint.toString() }, `Monitor mode: AUTO_BUY is false, skipping actual buy.`);
@@ -379,6 +455,7 @@ export class Bot {
             continue;
           }
 
+          buyConfirmed = true; // Set flag on success
           const effectiveSlippage = 'N/A'; // Placeholder
           logger.info(
             {
@@ -415,7 +492,7 @@ export class Bot {
           };
           logger.info({ mint: poolKeys!.baseMint.toString(), timestamp: buyTimestamp }, 'Buy order details recorded.');
 
-          break;
+          break; // Exit loop on success
         } catch (error: any) {
           const latency = Date.now() - startTime;
           logger.warn(
@@ -431,7 +508,7 @@ export class Bot {
           lastError = error; // Store error
           await sleep(500); // Optional delay before retry
         }
-      }
+      } // End buy retry loop
 
       // --- Send Buy Failed Alert ---
       if (!buyConfirmed && this.config.autoBuy) { // Check if buy wasn't confirmed and autoBuy was on
@@ -687,6 +764,7 @@ export class Bot {
         const latency = Date.now() - startTime;
 
         if (result.confirmed && result.signature) {
+          sellConfirmed = true; // Set flag on success
           const effectiveSlippage = 'N/A'; // Placeholder
           logger.info(
             {
@@ -699,7 +777,6 @@ export class Bot {
             },
             `Confirmed sell tx`,
           );
-          sellConfirmed = true;
 
           // --- Send Confirmed Sell Alert ---
           const sellTokenName = this.buyOrders[mint]?.tokenName || 'Name N/A'; // Get name from buy order if possible
@@ -828,9 +905,11 @@ export class Bot {
     return this.txExecutor.executeAndConfirm(transaction, wallet, latestBlockhash);
   }
 
-  // filterMatch remains unchanged as it doesn't directly impact PNL calculation
+  // filterMatch is now the CONFIRMATION phase, run AFTER initial/retry checks pass
   private async filterMatch(poolKeys: ExtendedLiquidityPoolKeys): Promise<boolean> {
-    if (this.config.filterCheckInterval === 0 || this.config.filterCheckDuration === 0) {
+    // If confirmation checks are disabled, return true immediately
+    if (this.config.filterCheckInterval === 0 || this.config.filterCheckDuration === 0 || this.config.consecutiveFilterMatches === 0) {
+      logger.trace({ mint: poolKeys.baseMint.toString() }, `Filter confirmation phase skipped (check interval/duration/consecutive matches is zero).`);
       return true;
     }
 
@@ -864,14 +943,16 @@ export class Bot {
               { mint: poolKeys.baseMint.toString() },
               `Filter matched ${matchCount} times consecutively.`
             );
-            return true;
+            return true; // Met consecutive matches requirement
           }
         } else {
-          logger.trace(
+          // If any check fails during the confirmation phase, immediately return false.
+          logger.info(
             { mint: poolKeys.baseMint.toString(), message },
-            `Filter match failed: ${message}`
+            `Confirmation phase failed: ${message}`
           );
-          matchCount = 0; // Reset count if a check fails
+          return false; // Fail confirmation immediately
+          // matchCount = 0; // Reset count logic removed - fail fast
         }
 
         await sleep(this.config.filterCheckInterval);
@@ -884,11 +965,14 @@ export class Bot {
       }
     } while (timesChecked < timesToCheck);
 
-    logger.debug(
+    // If loop finishes without meeting consecutive matches OR without failing early
+    logger.info(
       { mint: poolKeys.baseMint.toString() },
-      `Filter check duration ended. Matches: ${matchCount}/${this.config.consecutiveFilterMatches}. Required: ${this.config.consecutiveFilterMatches}.`
+      `Confirmation phase ended. Matches: ${matchCount}/${this.config.consecutiveFilterMatches}. Required: ${this.config.consecutiveFilterMatches}.`
     );
-    return false; // Didn't meet consecutive matches within the duration
+    // Return true only if consecutive matches were met (handled inside the loop)
+    // If loop finishes naturally, it means duration expired before meeting consecutive count.
+    return matchCount >= this.config.consecutiveFilterMatches;
   }
 
 

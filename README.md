@@ -64,12 +64,12 @@ You should see the following output:
 - `AUTO_BUY_DELAY` - Delay in milliseconds before buying a token.
 - `MAX_BUY_RETRIES` - Maximum number of retries for buying a token.
 - `BUY_SLIPPAGE` - Slippage %. Default: `10`.
-- `AUTO_BUY` - Set to `true` to automatically execute buys when filters pass. Set to `false` to run in monitor-only mode (logs filter results but doesn't buy). Default: `true`.
+- `AUTO_BUY` - Set to `true` to automatically execute buys when filters pass. Set to `false` to run in monitor-only mode (logs filter results but doesn't buy). **Default: `false` (Monitor mode)**.
 
 #### Sell
 
-- `AUTO_SELL` - Set to `true` to enable automatic selling of tokens.
-  - If you want to manually sell bought tokens, disable this option.
+- `AUTO_SELL` - Set to `true` to enable automatic selling of tokens. **Default: `true`**.
+  - If you want to manually sell bought tokens, set this to `false`.
 - `MAX_SELL_RETRIES` - Maximum number of retries for selling a token.
 - `AUTO_SELL_DELAY` - Delay in milliseconds before auto-selling a token.
 - `PRICE_CHECK_INTERVAL` - Interval in milliseconds for checking the take profit and stop loss conditions.
@@ -96,13 +96,15 @@ Note: When using snipe list filters below will be disabled.
 
 #### Filters
 
-- `FILTER_CHECK_INTERVAL` - Interval in milliseconds for checking if pool match the filters.
-  - Set to zero to disable filters.
-- `FILTER_CHECK_DURATION` - Time in milliseconds to wait for pool to match the filters.
-  - If pool doesn't match the filter buy will not happen.
-  - Set to zero to disable filters.
-- `CONSECUTIVE_FILTER_MATCHES` - How many times in a row pool needs to match the filters.
-  - This is useful because when pool is burned (and rugged), other filters may not report the same behavior. eg. pool size may still have old value
+The bot uses a multi-stage filtering process for new pools:
+
+1.  **Age Check:** Immediately discards pools older than `MAX_POOL_AGE_SECONDS`.
+2.  **Initial Filter Check:** Runs all enabled filters once.
+3.  **Retry Loop (If Initial Check Fails):** If the pool is younger than `MAX_POOL_AGE_SECONDS`, the bot will re-run filters every 3 seconds until the pool either passes the filters or exceeds the maximum age.
+4.  **Confirmation Phase (If Initial or Retry Check Passes):** Before buying, the bot enters a confirmation phase using the settings below to ensure the pool remains stable. If any filter fails during this phase, the token is discarded.
+    - `FILTER_CHECK_INTERVAL`: Interval (ms) for re-checking filters during the confirmation phase. Set `0` to disable confirmation.
+    - `FILTER_CHECK_DURATION`: Maximum duration (ms) for the confirmation phase. Set `0` to disable confirmation.
+    - `CONSECUTIVE_FILTER_MATCHES`: How many times filters must pass *consecutively* during the confirmation phase. Set `0` to disable confirmation.
 - `CHECK_IF_MUTABLE` - Check if the token metadata is mutable (true/false).
 - `CHECK_IF_SOCIALS` - Check if the token has social media links (true/false).
 - `CHECK_IF_MINT_IS_RENOUNCED` - Set to `true` to buy tokens only if their mint is renounced. Default: `true`.
