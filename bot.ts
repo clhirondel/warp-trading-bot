@@ -92,6 +92,8 @@ export interface BotConfig {
   autoBuy: boolean; // Added autoBuy flag
   checkMutable: boolean; // Added checkMutable flag
   checkSocials: boolean; // Added checkSocials flag
+  buyPriorityFeeMicroLamports: number; // New
+  sellPriorityFeeMicroLamports: number; // New
 }
 
 export interface BuyOrderDetails {
@@ -869,11 +871,22 @@ export class Bot {
       recentBlockhash: latestBlockhash.blockhash, // Use provided blockhash
       instructions: [
         ...(this.isWarp || this.isJito
-          ? []
-          : [
-            ComputeBudgetProgram.setComputeUnitPrice({ microLamports: this.config.unitPrice }),
-            ComputeBudgetProgram.setComputeUnitLimit({ units: this.config.unitLimit }),
-          ]),
+          ? [] // Warp/Jito don't use ComputeBudget instructions here
+          : (() => {
+              // Determine the correct priority fee for DefaultExecutor
+              let feeMicroLamports = this.config.unitPrice; // Start with default
+              if (direction === 'buy' && this.config.buyPriorityFeeMicroLamports > 0) {
+                  feeMicroLamports = this.config.buyPriorityFeeMicroLamports;
+              } else if (direction === 'sell' && this.config.sellPriorityFeeMicroLamports > 0) {
+                  feeMicroLamports = this.config.sellPriorityFeeMicroLamports;
+              }
+              // Return the compute budget instructions
+              return [
+                ComputeBudgetProgram.setComputeUnitPrice({ microLamports: feeMicroLamports }),
+                ComputeBudgetProgram.setComputeUnitLimit({ units: this.config.unitLimit }),
+              ];
+            })() // Immediately invoke the function to get the instructions array
+        ),
         ...(direction === 'buy'
           ? [
             createAssociatedTokenAccountIdempotentInstruction(
@@ -886,8 +899,8 @@ export class Bot {
           : []),
         ...innerTransaction.instructions,
         ...(direction === 'sell' ? [createCloseAccountInstruction(ataIn, wallet.publicKey, wallet.publicKey)] : []), // Close the base token ATA after selling
-      ],
-    }).compileToV0Message();
+    ],
+  }).compileToV0Message();
 
     const transaction = new VersionedTransaction(messageV0);
     transaction.sign([wallet, ...innerTransaction.signers]);

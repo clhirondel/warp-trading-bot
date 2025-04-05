@@ -53,7 +53,9 @@ import {
   SELL_TIMED_NAME_DURATION_SECONDS,
   MIN_MARKET_CAP, // Added import
   AUTO_BUY, // Added import
-  CHECK_IF_SOCIALS // Added import
+  CHECK_IF_SOCIALS, // Added import
+  BUY_PRIORITY_FEE_MICROLAMPORTS, // Import new constant
+  SELL_PRIORITY_FEE_MICROLAMPORTS, // Import new constant
 } from './helpers';
 
 import { version } from './package.json';
@@ -113,6 +115,7 @@ function printDetails(wallet: Keypair, quoteToken: Token, bot: Bot) {
   logger.info(`Max buy retries: ${botConfig.maxBuyRetries}`);
   logger.info(`Buy amount (${quoteToken.symbol}): ${botConfig.quoteAmount.toFixed()}`);
   logger.info(`Buy slippage: ${botConfig.buySlippage}%`);
+  logger.info(`Buy Token Priority Fee (MicroLamports): ${botConfig.buyPriorityFeeMicroLamports}%`);
 
   logger.info('- Sell -');
   logger.info(`Auto sell: ${AUTO_SELL}`);
@@ -124,6 +127,7 @@ function printDetails(wallet: Keypair, quoteToken: Token, bot: Bot) {
   logger.info(`Take profit: ${botConfig.takeProfitPercentage}%`);
   logger.info(`Stop loss: ${botConfig.stopLossPercentage}%`);
   logger.info(`Max sell duration: ${botConfig.maxSellDurationSeconds} seconds`);
+  logger.info(`Sell Token Priority Fee (Microlamports): ${botConfig.sellPriorityFeeMicroLamports}%`);
 
   logger.info('- Snipe list -');
   logger.info(`Snipe list: ${botConfig.useSnipeList}`);
@@ -227,6 +231,8 @@ const runListener = async () => {
     autoBuy: AUTO_BUY, // Added autoBuy
     checkMutable: CHECK_IF_MUTABLE, // Added checkMutable
     checkSocials: CHECK_IF_SOCIALS, // Added checkSocials
+    buyPriorityFeeMicroLamports: BUY_PRIORITY_FEE_MICROLAMPORTS, // Assign new buy fee
+    sellPriorityFeeMicroLamports: SELL_PRIORITY_FEE_MICROLAMPORTS, // Assign new sell fee
 };
 
   const bot = new Bot(connection, poolCache, txExecutor, botConfig);

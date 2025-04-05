@@ -46,6 +46,7 @@ export const QUOTE_MINT = (retrieveEnvVariable('QUOTE_MINT', logger) || 'So11111
 export const QUOTE_AMOUNT = retrieveEnvVariable('QUOTE_AMOUNT', logger) || '0.01';
 export const MAX_BUY_RETRIES = Number(retrieveEnvVariable('MAX_BUY_RETRIES', logger));
 export const BUY_SLIPPAGE = Number(retrieveEnvVariable('BUY_SLIPPAGE', logger));
+export const BUY_PRIORITY_FEE_MICROLAMPORTS = Number(retrieveEnvVariable('BUY_PRIORITY_FEE_MICROLAMPORTS', logger) || '0'); // Handle default
 
 // Sell
 export const AUTO_SELL = retrieveEnvVariable('AUTO_SELL', logger) === 'true'; // Default AUTO_SELL to true
@@ -64,6 +65,7 @@ export const SELL_TIMED_NAME_KEYWORDS = (retrieveEnvVariable('SELL_TIMED_NAME_KE
   .filter((s) => s);
 export const SELL_TIMED_NAME_DURATION_SECONDS = Number(retrieveEnvVariable('SELL_TIMED_NAME_DURATION_SECONDS', logger) || '60');
 export const MAX_SELL_DURATION_SECONDS = Number(retrieveEnvVariable('MAX_SELL_DURATION_SECONDS', logger) || '0'); // Handle default
+export const SELL_PRIORITY_FEE_MICROLAMPORTS = Number(retrieveEnvVariable('SELL_PRIORITY_FEE_MICROLAMPORTS', logger) || '0'); // Handle default
 
 // Filters
 export const FILTER_CHECK_INTERVAL = Number(retrieveEnvVariable('FILTER_CHECK_INTERVAL', logger));
