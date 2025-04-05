@@ -94,6 +94,7 @@ export interface BotConfig {
   checkSocials: boolean; // Added checkSocials flag
   buyPriorityFeeMicroLamports: number; // New
   sellPriorityFeeMicroLamports: number; // New
+  ataPriorityFeeMaxMicroLamports: number;
 }
 
 export interface BuyOrderDetails {
@@ -866,41 +867,74 @@ export class Bot {
       poolKeys.version,
     );
 
+    // **Important:** Define the core instructions *before* adding compute budget ones
+    const coreInstructions = [
+      ...innerTransaction.instructions,
+      // Add ATA instruction conditionally ONLY for buys
+      ...(direction === 'buy'
+          ? [
+              createAssociatedTokenAccountIdempotentInstruction(
+                  wallet.publicKey,
+                  ataOut, // ata for the token being bought
+                  wallet.publicKey,
+                  tokenOut.mint, // mint of the token being bought
+              ),
+            ]
+          : []),
+      // Add close account instruction conditionally ONLY for sells
+      ...(direction === 'sell' ? [createCloseAccountInstruction(ataIn, wallet.publicKey, wallet.publicKey)] : []),
+    ];
+    
+    // Now determine the fee and create the final instructions array
+    let finalInstructions = [];
+    if (this.isWarp || this.isJito) {
+      // Warp/Jito don't use ComputeBudget instructions here, just add core
+      finalInstructions = [...coreInstructions];
+    } else {
+      // --- DefaultExecutor Fee Logic with Optional ATA ---
+      let feeMicroLamports = this.config.unitPrice; // Start with the mandatory default price
+    
+      // Check if ATA instruction is present in the core instructions
+      const includesAtaInstruction = coreInstructions.some(ix =>
+          // Simple check based on programId and keys - adjust if needed
+          ix.programId.equals(TOKEN_PROGRAM_ID) && ix.keys.length >= 7 // ATA instruction has >= 7 keys
+      );
+    
+      if (includesAtaInstruction && this.config.ataPriorityFeeMaxMicroLamports > 0) {
+           // Use ATA MAX fee if ATA instruction present AND max fee is configured (> 0)
+          feeMicroLamports = this.config.ataPriorityFeeMaxMicroLamports;
+          logger.trace(`Using ATA priority fee: ${feeMicroLamports} micro-lamports/unit`);
+    
+      } else if (direction === 'buy' && this.config.buyPriorityFeeMicroLamports > 0) {
+          // Fallback to specific buy fee if set (> 0)
+          feeMicroLamports = this.config.buyPriorityFeeMicroLamports;
+          logger.trace(`Using specific Buy priority fee: ${feeMicroLamports} micro-lamports/unit`);
+    
+      } else if (direction === 'sell' && this.config.sellPriorityFeeMicroLamports > 0) {
+          // Fallback to specific sell fee if set (> 0)
+          feeMicroLamports = this.config.sellPriorityFeeMicroLamports;
+          logger.trace(`Using specific Sell priority fee: ${feeMicroLamports} micro-lamports/unit`);
+    
+      } else {
+          // Otherwise, the default this.config.unitPrice is used
+          logger.trace(`Using default priority fee: ${feeMicroLamports} micro-lamports/unit`);
+      }
+    
+      // Prepend compute budget instructions
+      finalInstructions = [
+          ComputeBudgetProgram.setComputeUnitPrice({ microLamports: feeMicroLamports }),
+          ComputeBudgetProgram.setComputeUnitLimit({ units: this.config.unitLimit }),
+          ...coreInstructions, // Add the core instructions after
+      ];
+      // --- End DefaultExecutor Fee Logic ---
+    }
+    
+    // Compile the message with the final instruction set
     const messageV0 = new TransactionMessage({
       payerKey: wallet.publicKey,
-      recentBlockhash: latestBlockhash.blockhash, // Use provided blockhash
-      instructions: [
-        ...(this.isWarp || this.isJito
-          ? [] // Warp/Jito don't use ComputeBudget instructions here
-          : (() => {
-              // Determine the correct priority fee for DefaultExecutor
-              let feeMicroLamports = this.config.unitPrice; // Start with default
-              if (direction === 'buy' && this.config.buyPriorityFeeMicroLamports > 0) {
-                  feeMicroLamports = this.config.buyPriorityFeeMicroLamports;
-              } else if (direction === 'sell' && this.config.sellPriorityFeeMicroLamports > 0) {
-                  feeMicroLamports = this.config.sellPriorityFeeMicroLamports;
-              }
-              // Return the compute budget instructions
-              return [
-                ComputeBudgetProgram.setComputeUnitPrice({ microLamports: feeMicroLamports }),
-                ComputeBudgetProgram.setComputeUnitLimit({ units: this.config.unitLimit }),
-              ];
-            })() // Immediately invoke the function to get the instructions array
-        ),
-        ...(direction === 'buy'
-          ? [
-            createAssociatedTokenAccountIdempotentInstruction(
-              wallet.publicKey,
-              ataOut, // ata for the token being bought
-              wallet.publicKey,
-              tokenOut.mint, // mint of the token being bought
-            ),
-          ]
-          : []),
-        ...innerTransaction.instructions,
-        ...(direction === 'sell' ? [createCloseAccountInstruction(ataIn, wallet.publicKey, wallet.publicKey)] : []), // Close the base token ATA after selling
-    ],
-  }).compileToV0Message();
+      recentBlockhash: latestBlockhash.blockhash,
+      instructions: finalInstructions, // Use the final array
+    }).compileToV0Message();
 
     const transaction = new VersionedTransaction(messageV0);
     transaction.sign([wallet, ...innerTransaction.signers]);

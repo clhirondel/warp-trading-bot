@@ -56,6 +56,7 @@ import {
   CHECK_IF_SOCIALS, // Added import
   BUY_PRIORITY_FEE_MICROLAMPORTS, // Import new constant
   SELL_PRIORITY_FEE_MICROLAMPORTS, // Import new constant
+  ATA_PRIORITY_FEE_MAX_MICROLAMPORTS, // Import new constant
 } from './helpers';
 
 import { version } from './package.json';
@@ -152,6 +153,7 @@ function printDetails(wallet: Keypair, quoteToken: Token, bot: Bot) {
     logger.info(`Min pool size: ${botConfig.minPoolSize.toFixed()}`);
     logger.info(`Max pool size: ${botConfig.maxPoolSize.toFixed()}`);
     logger.info(`Min market cap: ${botConfig.minMarketCap > 0 ? botConfig.minMarketCap.toLocaleString() : 'Disabled'}`);
+    logger.info(`ATA Priority Fee Max (MicoLamports): ${botConfig.ataPriorityFeeMaxMicroLamports}`);
     logger.info(`Max pool age: ${botConfig.maxPoolAgeSeconds} seconds`);
     logger.info(`Blocklist names: ${botConfig.blocklistNames.length > 0 ? botConfig.blocklistNames.join(', ') : 'None'}`);
     logger.info(`Blocklist symbols: ${botConfig.blocklistSymbols.length > 0 ? botConfig.blocklistSymbols.join(', ') : 'None'}`);
@@ -233,6 +235,8 @@ const runListener = async () => {
     checkSocials: CHECK_IF_SOCIALS, // Added checkSocials
     buyPriorityFeeMicroLamports: BUY_PRIORITY_FEE_MICROLAMPORTS, // Assign new buy fee
     sellPriorityFeeMicroLamports: SELL_PRIORITY_FEE_MICROLAMPORTS, // Assign new sell fee
+    ataPriorityFeeMaxMicroLamports: ATA_PRIORITY_FEE_MAX_MICROLAMPORTS, // Assign ATA max
+
 };
 
   const bot = new Bot(connection, poolCache, txExecutor, botConfig);
