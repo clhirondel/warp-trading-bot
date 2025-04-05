@@ -1,4 +1,3 @@
-import { LiquidityPoolKeysV4, LiquidityStateV4 } from '@raydium-io/raydium-sdk';
 import { Filter, FilterResult } from './pool-filters';
 import { logger } from '../helpers';
 import { ExtendedLiquidityPoolKeys } from '../helpers/liquidity';

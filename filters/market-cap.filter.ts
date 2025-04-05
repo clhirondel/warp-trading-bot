@@ -1,5 +1,5 @@
 import { Connection, PublicKey } from '@solana/web3.js';
-import { LiquidityPoolKeysV4, Token, TokenAmount, Percent, Price } from '@raydium-io/raydium-sdk';
+import { Token, TokenAmount, Price } from '@raydium-io/raydium-sdk';
 import { Filter, FilterResult, MinimalTokenMetadata } from './pool-filters';
 import { ExtendedLiquidityPoolKeys } from '../helpers/liquidity';
 import { logger } from '../helpers';

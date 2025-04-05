@@ -5,41 +5,28 @@ import {
   PublicKey,
   TransactionMessage,
   VersionedTransaction,
-  AccountInfo,
-  Commitment,
-  Transaction,
   BlockhashWithExpiryBlockHeight,
 } from '@solana/web3.js';
 import {
-  ASSOCIATED_TOKEN_PROGRAM_ID,
   Account,
-  MintLayout,
   TOKEN_PROGRAM_ID,
-  TokenAccountNotFoundError,
-  TokenInvalidAccountOwnerError,
-  createAssociatedTokenAccountInstruction,
   createAssociatedTokenAccountIdempotentInstruction,
   createCloseAccountInstruction,
   getAccount,
   getAssociatedTokenAddress,
   getOrCreateAssociatedTokenAccount,
-  RawAccount,
 } from '@solana/spl-token'; // Correct import path
 import {
   Liquidity,
-  LiquidityPoolKeys,
   LiquidityPoolInfo,
-  LiquidityStateLayoutV4,
   Percent,
   Price, // Added Price import
   Token,
   TokenAmount,
-  CurrencyAmount,
-  Market as RaydiumMarket,
   LiquidityPoolKeysV4, // Import specific version if needed
 } from '@raydium-io/raydium-sdk';
 import { Market as SerumMarket } from '@project-serum/serum';
-import { MarketCache, PoolCache, SnipeListCache } from './cache';
+import { PoolCache, SnipeListCache } from './cache';
 import { PoolFilters, MinimalTokenMetadata } from './filters'; // Import MinimalTokenMetadata
 import { TransactionExecutor } from './transactions';
 import { createPoolKeys, logger, NETWORK, sleep } from './helpers';
@@ -103,6 +90,8 @@ export interface BotConfig {
   sellTimedNameDurationSeconds: number;
   minMarketCap: number; // Added minMarketCap
   autoBuy: boolean; // Added autoBuy flag
+  checkMutable: boolean; // Added checkMutable flag
+  checkSocials: boolean; // Added checkSocials flag
 }
 
 export interface BuyOrderDetails {
@@ -161,6 +150,8 @@ export class Bot {
       filterCheckInterval: this.config.filterCheckInterval,
       consecutiveFilterMatches: this.config.consecutiveFilterMatches,
       minMarketCap: this.config.minMarketCap, // Pass minMarketCap
+      checkMutable: this.config.checkMutable, // Pass checkMutable
+      checkSocials: this.config.checkSocials, // Pass checkSocials
     });
 
     if (this.config.useSnipeList) {

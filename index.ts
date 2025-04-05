@@ -52,7 +52,8 @@ import {
   SELL_TIMED_NAME_KEYWORDS,
   SELL_TIMED_NAME_DURATION_SECONDS,
   MIN_MARKET_CAP, // Added import
-  AUTO_BUY // Added import
+  AUTO_BUY, // Added import
+  CHECK_IF_SOCIALS // Added import
 } from './helpers';
 
 import { version } from './package.json';
@@ -139,12 +140,17 @@ function printDetails(wallet: Keypair, quoteToken: Token, bot: Bot) {
     logger.info(`Check renounced: ${botConfig.checkRenounced}`);
     logger.info(`Check freezable: ${botConfig.checkFreezable}`);
     logger.info(`Check burned: ${botConfig.checkBurned}`);
+    logger.info(`Check mutable: ${botConfig.checkMutable}`);
+    logger.info(`Check socials: ${botConfig.checkSocials}`);
+    logger.info(`Sell timed name keywords: ${botConfig.sellTimedNameKeywords.length > 0 ? botConfig.sellTimedNameKeywords.join(', ') : 'None'}`);
+    logger.info(`Sell timed name duration: ${botConfig.sellTimedNameDurationSeconds} seconds`);
+    logger.info(`Consecutive filter matches: ${botConfig.consecutiveFilterMatches}`);
     logger.info(`Min pool size: ${botConfig.minPoolSize.toFixed()}`);
     logger.info(`Max pool size: ${botConfig.maxPoolSize.toFixed()}`);
-    logger.info(`Min market cap: ${botConfig.minMarketCap.toLocaleString()}`); // Added market cap logging
+    logger.info(`Min market cap: ${botConfig.minMarketCap > 0 ? botConfig.minMarketCap.toLocaleString() : 'Disabled'}`);
     logger.info(`Max pool age: ${botConfig.maxPoolAgeSeconds} seconds`);
-    logger.info(`Blocklist names: ${botConfig.blocklistNames}`);
-    logger.info(`Blocklist symbols: ${botConfig.blocklistSymbols}`);
+    logger.info(`Blocklist names: ${botConfig.blocklistNames.length > 0 ? botConfig.blocklistNames.join(', ') : 'None'}`);
+    logger.info(`Blocklist symbols: ${botConfig.blocklistSymbols.length > 0 ? botConfig.blocklistSymbols.join(', ') : 'None'}`);
   }
 
   logger.info('------- CONFIGURATION END -------');
@@ -215,10 +221,12 @@ const runListener = async () => {
     blocklistSymbols: FILTER_BLOCKLIST_SYMBOLS,
     maxPoolAgeSeconds: MAX_POOL_AGE_SECONDS,
     maxSellDurationSeconds: MAX_SELL_DURATION_SECONDS,
-  sellTimedNameKeywords: SELL_TIMED_NAME_KEYWORDS,
-  sellTimedNameDurationSeconds: SELL_TIMED_NAME_DURATION_SECONDS,
-  minMarketCap: MIN_MARKET_CAP, // Added minMarketCap
-  autoBuy: AUTO_BUY, // Added autoBuy
+    sellTimedNameKeywords: SELL_TIMED_NAME_KEYWORDS,
+    sellTimedNameDurationSeconds: SELL_TIMED_NAME_DURATION_SECONDS,
+    minMarketCap: MIN_MARKET_CAP, // Added minMarketCap
+    autoBuy: AUTO_BUY, // Added autoBuy
+    checkMutable: CHECK_IF_MUTABLE, // Added checkMutable
+    checkSocials: CHECK_IF_SOCIALS, // Added checkSocials
 };
 
   const bot = new Bot(connection, poolCache, txExecutor, botConfig);

@@ -1,6 +1,7 @@
 import { Connection, PublicKey } from '@solana/web3.js';
-import { LiquidityPoolKeysV4, Token, TokenAmount, MAINNET_PROGRAM_ID as RAYDIUM_MAINNET_PROGRAM_ID } from '@raydium-io/raydium-sdk';
-import { getMetadataAccountDataSerializer, MPL_TOKEN_METADATA_PROGRAM_ID as MPL_TOKEN_METADATA_PROGRAM_ID_ADDRESS, MetadataAccountData } from '@metaplex-foundation/mpl-token-metadata';
+// Removed unused LiquidityPoolKeysV4, RAYDIUM_MAINNET_PROGRAM_ID
+import { Token, TokenAmount } from '@raydium-io/raydium-sdk';
+import { getMetadataAccountDataSerializer, MPL_TOKEN_METADATA_PROGRAM_ID as MPL_TOKEN_METADATA_PROGRAM_ID_ADDRESS } from '@metaplex-foundation/mpl-token-metadata';
 import { BurnFilter } from './burn.filter';
 import { MutableFilter } from './mutable.filter';
 import { NameSymbolFilter } from '../filters/name-symbol.filter';
@@ -9,7 +10,7 @@ import { PoolSizeFilter } from './pool-size.filter';
 import { MaxPoolAgeFilter } from './max-pool-age.filter';
 import { MarketCapFilter } from './market-cap.filter'; // Added import
 import { ExtendedLiquidityPoolKeys } from '../helpers/liquidity';
-import { CHECK_IF_BURNED, CHECK_IF_FREEZABLE, CHECK_IF_MINT_IS_RENOUNCED, CHECK_IF_MUTABLE, CHECK_IF_SOCIALS, logger } from '../helpers';
+import { logger } from '../helpers';
 
 export interface Filter {
   execute(poolKeys: ExtendedLiquidityPoolKeys, metadata?: MinimalTokenMetadata): Promise<FilterResult>;
@@ -46,6 +47,8 @@ export interface PoolFilterArgs {
   checkBurned: boolean;
   quoteToken: Token;
   minMarketCap: number; // Added minMarketCap
+  checkMutable: boolean; // Added checkMutable
+  checkSocials: boolean; // Added checkSocials
 }
 
 export class PoolFilters implements Filter {
@@ -55,21 +58,23 @@ export class PoolFilters implements Filter {
     readonly connection: Connection,
     readonly args: PoolFilterArgs,
   ) {
-    if (CHECK_IF_BURNED) {
+    if (args.checkBurned) {
       // BurnFilter needs LP supply, not directly metadata, but often checked alongside metadata filters
       this.filters.push(new BurnFilter(connection));
     }
 
-    if (CHECK_IF_MINT_IS_RENOUNCED || CHECK_IF_FREEZABLE) {
+    if (args.checkRenounced || args.checkFreezable) {
       // RenouncedFreezeFilter needs Mint account data, which can be fetched alongside metadata
-      const filter = new RenouncedFreezeFilter(connection, CHECK_IF_MINT_IS_RENOUNCED, CHECK_IF_FREEZABLE);
+      const filter = new RenouncedFreezeFilter(connection, args.checkRenounced, args.checkFreezable);
       (filter as any).requiresMetadata = true; // Mark as needing metadata fetch contextually
       this.filters.push(filter);
     }
 
-    if (CHECK_IF_MUTABLE || CHECK_IF_SOCIALS) {
+    // Pass the actual config value for checkMutable, not the constant directly
+    if (args.checkMutable || args.checkSocials) {
       // MutableFilter explicitly requires metadata
-      const filter = new MutableFilter(connection, getMetadataAccountDataSerializer(), CHECK_IF_MUTABLE, CHECK_IF_SOCIALS);
+      // Pass args.checkMutable instead of the global constant CHECK_IF_MUTABLE
+      const filter = new MutableFilter(connection, getMetadataAccountDataSerializer(), args.checkMutable, args.checkSocials);
       (filter as any).requiresMetadata = true;
       this.filters.push(filter);
     }
